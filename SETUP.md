@@ -76,6 +76,6 @@ cd ..
 pytest backend/tests -q
 ```
 
-Run `npm ci` and `npm run build` in `frontend` to check the production UI bundle. GitHub Actions runs these checks for pushes and pull requests.
+Run `npm ci` and `npm run build` in `frontend` if you want to check the production UI bundle.
 
 For Render deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md).

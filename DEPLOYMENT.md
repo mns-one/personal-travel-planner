@@ -9,7 +9,7 @@ The root `render.yaml` defines two services: a Python FastAPI API and a static V
 3. In Render, choose **New → Blueprint** and connect the repository containing `render.yaml`.
 4. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` when Render prompts for the `sync: false` values. Set the service role key only on `wanderwise-api`.
 5. Optionally provide `GROQ_API_KEY` for AI recommendations, itinerary generation, and refinements. Set `GROQ_MODEL` if you want a model other than the default. Without a key, the app uses its local fallback content.
-6. Wait for the GitHub Actions checks to pass; both Render services deploy with the `checksPass` trigger.
+6. Deploy the Blueprint. Render will build and deploy both services when you push commits to the connected GitHub repository.
 
 The backend health endpoint is `/api/health`. The frontend is served as a static site with a rewrite to `index.html`, so query-string share links continue to open the React app. If you rename either Render service or attach custom domains, update `VITE_API_URL` and `CORS_ORIGINS`; frontend URL changes require a new static build.
 
