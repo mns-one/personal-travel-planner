@@ -1,0 +1,1 @@
+-- Database schema for Personalized Travel Itinerary Planner\n-- Add tables and seed data here.\n
