@@ -2,13 +2,15 @@
 
 Base URL: `http://localhost:8000`. The frontend uses Vite to proxy `/api` calls to this service.
 
+All trip endpoints require an `X-Owner-ID` header containing a UUID. The frontend creates a random ID and stores it in browser `localStorage`. Requests with a different ID cannot list, fetch, edit, generate, or delete those trips. This is temporary demo separation, not authentication.
+
 ## `GET /api/health`
 
 Returns `{ "status": "ok" }` when the service is running.
 
 ## `POST /api/trips`
 
-Creates and stores a trip in memory. Successful response: HTTP 201.
+Creates and persistently stores a trip for the owner ID in `X-Owner-ID`. Successful response: HTTP 201. Response includes `itinerary: null` until one is generated.
 
 ```json
 {
@@ -37,19 +39,31 @@ Request: `{ "trip_id": "<UUID returned by create trip>" }`. Returns `{ "trip_id"
 
 ## `GET /api/trips`
 
-Returns the list of trips held in memory by this running backend process.
+Returns trips belonging to the owner ID in `X-Owner-ID`, including saved itineraries.
+
+## `PATCH /api/trips/{trip_id}`
+
+Updates any supplied trip preference fields. The merged preferences are validated as a complete trip before saving. Returns the updated trip; invalid dates or other fields return HTTP 422.
+
+## `DELETE /api/trips/{trip_id}`
+
+Deletes the trip and its saved itinerary. Returns HTTP 204, or HTTP 404 if it does not exist.
 
 ## `POST /api/trips/{trip_id}/recommendations`
 
-Returns `{ "trip_id", "destination", "recommendations", "source", "note" }`. Recommendations are categorized as `attraction`, `dining`, or `experience`, and include a description, match reason, cost level, and related interests. `source` is `ai` when Gemini returned validated results, or `curated_fallback` when no AI key is configured or the provider fails. Configure `GEMINI_API_KEY` to enable Gemini. Set optional `GEMINI_MODEL` to change the model (default `gemini-2.5-flash`). The response reminds users to check changing venue details.
+Returns `{ "trip_id", "destination", "recommendations", "source", "note" }`. Recommendations are categorized as `attraction`, `dining`, or `experience`, and include a description, match reason, cost level, and related interests. Recommendations use Groq when `GROQ_API_KEY` is configured; otherwise, or if generation fails, the API returns starter suggestions with `source: "curated_fallback"`. The response reminds users to check changing venue details.
 
 ## Itinerary generation
 
-`POST /api/itineraries/generate` calls the itinerary service. Set `GROQ_API_KEY` to enable Groq; optional `GROQ_MODEL` selects a model (default `llama-3.3-70b-versatile`). Without a key, this service returns a local fallback itinerary. Both paths pass through the schedule optimizer. Recommendation generation remains a separate Phase 3 feature.
+`POST /api/itineraries/generate` calls the itinerary service and saves the result to its trip. Set `GROQ_API_KEY` to enable Groq for itinerary generation, recommendations, and refinements; optional `GROQ_MODEL` selects a model (default `llama-3.3-70b-versatile`). Without a key, these features use local fallback content. Generated itineraries pass through the schedule optimizer.
 
 ## `GET /api/trips/{trip_id}`
 
-Returns a previously created trip or HTTP 404. Stored trips are cleared when the backend restarts.
+Returns a previously created trip and its saved itinerary (if generated), or HTTP 404.
+
+## Sharing and export
+
+The frontend shares a URL with the trip ID in the `?trip=` query parameter. Opening it fetches the saved trip through `GET /api/trips/{trip_id}` and displays the itinerary in view mode. The browser can also download the trip as Markdown or JSON; those exports are generated locally from the response and need no extra API endpoint. The viewer must have the same browser owner ID, so the link does not grant access from another browser.
 
 ## `POST /api/trips/{trip_id}/itinerary/refine`
 

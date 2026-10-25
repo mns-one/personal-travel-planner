@@ -37,20 +37,6 @@ def _local_refinement(request: ItineraryRefineRequest) -> ItineraryRefineRespons
 
     for day in target_days:
         day.notes.append(f"Requested adjustment: {instruction}")
-    itinerary.days = optimize_itinerary(itinerary.days, TripResponse.model_construct(
-        id=itinerary.trip_id,
-        destination=itinerary.destination,
-        start_date=itinerary.days[0].date,
-        end_date=itinerary.days[-1].date,
-        budget=1,
-        travelers=1,
-        interests=[],
-        dietary_needs=[],
-        mobility_needs=[],
-        travel_pace="balanced",
-        travel_style="comfort",
-        status="created",
-    ))
     return ItineraryRefineResponse(itinerary=itinerary, assistant_message=message, source="local")
 
 

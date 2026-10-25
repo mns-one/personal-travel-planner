@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  ArrowLeft, ArrowRight, CalendarDays, Check, Compass, MapPin,
-  Sparkles, Users, Wallet,
+  ArrowLeft, ArrowRight, CalendarDays, Check, Compass, Copy, Download, MapPin,
+  Share2, Sparkles, Users, Wallet,
 } from 'lucide-react'
 import { tripsAPI } from './api/trips.js'
 
@@ -19,6 +19,41 @@ const blankTrip = {
   interests: [], dietary_needs: [], mobility_needs: [], travel_pace: 'balanced', travel_style: 'comfort',
 }
 
+function downloadFile(filename, contents, contentType) {
+  const file = new Blob([contents], { type: contentType })
+  const url = URL.createObjectURL(file)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function itineraryMarkdown(trip, itinerary) {
+  const lines = [
+    `# ${itinerary.destination} Trip Plan`,
+    '',
+    `**Dates:** ${trip.start_date} to ${trip.end_date}  `,
+    `**Travelers:** ${trip.travelers}  `,
+    `**Budget:** ${trip.budget}  `,
+    `**Style:** ${trip.travel_style} · **Pace:** ${trip.travel_pace}`,
+    '',
+  ]
+  itinerary.days.forEach((day) => {
+    lines.push(`## Day ${day.day}: ${day.title} (${day.date})`, '')
+    for (const [slot, activities] of [['Morning', day.morning], ['Afternoon', day.afternoon], ['Evening', day.evening]]) {
+      if (activities.length) {
+        lines.push(`### ${slot}`)
+        activities.forEach((activity) => lines.push(`- ${activity}`))
+        lines.push('')
+      }
+    }
+    if (day.notes.length) lines.push(`**Notes:** ${day.notes.join(' ')}`, '')
+  })
+  lines.push(`---`, '', itinerary.note)
+  return lines.join('\n')
+}
+
 function App() {
   const [step, setStep] = useState(0)
   const [trip, setTrip] = useState(blankTrip)
@@ -32,6 +67,10 @@ function App() {
   const [refining, setRefining] = useState(false)
   const [refineMessage, setRefineMessage] = useState('')
   const [apiError, setApiError] = useState('')
+  const [savedTrips, setSavedTrips] = useState([])
+  const [historyError, setHistoryError] = useState('')
+  const [shareMessage, setShareMessage] = useState('')
+  const [isSharedView, setIsSharedView] = useState(false)
 
   useEffect(() => {
     document.title = result ? `Your ${trip.destination} itinerary — Wanderwise` : 'Wanderwise — your trip, your way'
@@ -40,6 +79,70 @@ function App() {
   function update(field, value) {
     setTrip((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: '' }))
+  }
+
+  useEffect(() => {
+    tripsAPI.list().then(setSavedTrips).catch((error) => setHistoryError(error.message))
+  }, [])
+
+  useEffect(() => {
+    const sharedTripId = new URLSearchParams(window.location.search).get('trip')
+    if (!sharedTripId) return
+    setIsSharedView(true)
+    tripsAPI.get(sharedTripId).then((sharedTrip) => {
+      if (!sharedTrip.itinerary) throw new Error('This trip does not have a saved itinerary to share yet.')
+      setTripId(sharedTrip.id)
+      setTrip({ ...sharedTrip, budget: String(sharedTrip.budget) })
+      setResult(sharedTrip.itinerary)
+    }).catch((error) => setHistoryError(error.message))
+  }, [])
+
+  async function refreshTrips() {
+    try {
+      setSavedTrips(await tripsAPI.list())
+      setHistoryError('')
+    } catch (error) {
+      setHistoryError(error.message)
+    }
+  }
+
+  async function openSavedTrip(savedTrip) {
+    setTripId(savedTrip.id)
+    setTrip({ ...savedTrip, budget: String(savedTrip.budget) })
+    setRecommendations(null)
+    setApiError('')
+    try {
+      const itinerary = savedTrip.itinerary || await tripsAPI.generateItinerary(savedTrip.id)
+      setResult(itinerary)
+    } catch (error) {
+      setApiError(error.message)
+    }
+  }
+
+  async function renameSavedTrip(savedTrip) {
+    const destination = window.prompt('Update trip destination:', savedTrip.destination)
+    if (!destination || destination.trim() === savedTrip.destination) return
+    try {
+      await tripsAPI.update(savedTrip.id, { destination: destination.trim() })
+      await refreshTrips()
+    } catch (error) {
+      setHistoryError(error.message)
+    }
+  }
+
+  async function deleteSavedTrip(savedTrip) {
+    if (!window.confirm(`Delete your trip to ${savedTrip.destination}? This also deletes its saved itinerary.`)) return
+    try {
+      await tripsAPI.remove(savedTrip.id)
+      await refreshTrips()
+      if (tripId === savedTrip.id) {
+        setTripId(null)
+        setResult(null)
+        setRecommendations(null)
+      }
+    } catch (error) {
+      setHistoryError(error.message)
+    }
   }
 
   function toggleInterest(interest) {
@@ -72,10 +175,12 @@ function App() {
     try {
       const created = await tripsAPI.create({ ...trip, budget: Number(trip.budget), travelers: Number(trip.travelers) })
       setTripId(created.id)
+      await refreshTrips()
       const suggested = await tripsAPI.recommend(created.id)
       setRecommendations(suggested)
       const itinerary = await tripsAPI.generateItinerary(created.id)
       setResult(itinerary)
+      await refreshTrips()
     } catch (error) {
       setApiError(`${error.message} Is the FastAPI server running?`)
     } finally {
@@ -100,6 +205,34 @@ function App() {
     }
   }
 
+  async function copyShareLink() {
+    const shareUrl = new URL(window.location.href)
+    shareUrl.search = `?trip=${tripId}`
+    try {
+      await navigator.clipboard.writeText(shareUrl.toString())
+      setShareMessage('Share link copied. Anyone with this link can view the trip.')
+    } catch {
+      setShareMessage(shareUrl.toString())
+    }
+  }
+
+  function exportMarkdown() {
+    const slug = result.destination.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    downloadFile(`${slug}-itinerary.md`, itineraryMarkdown(trip, result), 'text/markdown;charset=utf-8')
+  }
+
+  function exportJson() {
+    const exportedTrip = { ...trip }
+    delete exportedTrip.id
+    delete exportedTrip.status
+    delete exportedTrip.itinerary
+    downloadFile(
+      `${result.destination.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-itinerary.json`,
+      JSON.stringify({ trip: exportedTrip, itinerary: result }, null, 2),
+      'application/json;charset=utf-8',
+    )
+  }
+
   const progress = ((step + 1) / steps.length) * 100
 
   return (
@@ -112,6 +245,12 @@ function App() {
 
       <div className="main-layout" id="home">
         <section className="form-column">
+          {!isSharedView && <section className="saved-trips">
+            <div className="saved-trips-heading"><div><span className="small-label">YOUR TRAVEL HISTORY</span><h2>Saved trips <span>{savedTrips.length}</span></h2></div><button className="text-button" type="button" onClick={refreshTrips}>Refresh</button></div>
+            {historyError && <p className="history-error">{historyError}</p>}
+            {savedTrips.length === 0 && !historyError && <p className="history-empty">Your saved trips will show up here.</p>}
+            {savedTrips.slice(0, 4).map((savedTrip) => <article className="saved-trip-row" key={savedTrip.id}><button type="button" className="saved-trip-open" onClick={() => openSavedTrip(savedTrip)}><span><b>{savedTrip.destination}</b><small>{savedTrip.start_date} — {savedTrip.end_date}{savedTrip.itinerary ? ' · itinerary saved' : ''}</small></span><ArrowRight size={15} /></button><button type="button" className="text-button" onClick={() => renameSavedTrip(savedTrip)} aria-label={`Edit ${savedTrip.destination}`}>Edit</button><button type="button" className="text-button delete-trip" onClick={() => deleteSavedTrip(savedTrip)} aria-label={`Delete ${savedTrip.destination}`}>Delete</button></article>)}
+          </section>}
           {!result ? (
             <>
               <div className="eyebrow"><span className="eyebrow-line" /> THE ART OF GOING YOUR OWN WAY</div>
@@ -174,17 +313,18 @@ function App() {
               <h1>Your trip,<br /><em>taking shape.</em></h1>
               <p className="intro">A first draft for {result.destination}, made around what you love. Your trip has {result.days.length} {result.days.length === 1 ? 'day' : 'days'} planned.</p>
               <p className="optimization-label"><span>✳</span> DAYS ORDERED BY TIME AND NEARBY AREA HINTS</p>
+              <section className="share-export-card"><div><span className="small-label">TAKE YOUR PLAN WITH YOU</span><p>Share a view-only link or download a copy.</p></div><div className="share-export-actions"><button type="button" className="secondary-button" onClick={copyShareLink}><Share2 size={14} /> Share link</button><button type="button" className="secondary-button" onClick={exportMarkdown}><Download size={14} /> Markdown</button><button type="button" className="secondary-button" onClick={exportJson}><Download size={14} /> JSON</button></div>{shareMessage && <p className="share-message" role="status"><Copy size={12} />{shareMessage}</p>}</section>
               {recommendations && <section className="recommendations-section"><div className="recommendation-heading"><div><span className="small-label">CURATED FOR YOUR TRIP</span><h2>Ideas to make it yours</h2></div><span className={`source-badge ${recommendations.source}`}>{recommendations.source === 'ai' ? 'AI SUGGESTIONS' : 'STARTER IDEAS'}</span></div><div className="recommendation-grid">{recommendations.recommendations.map((item) => <article className="recommendation-card" key={`${item.category}-${item.name}`}><div className="recommendation-top"><span className="category-label">{item.category}</span><span className="cost-label">{item.estimated_cost} cost</span></div><h3>{item.name}</h3><p>{item.description}</p><p className="match-note">{item.why_it_matches}</p></article>)}</div><p className="recommendation-note">{recommendations.note}</p></section>}
               <div className="itinerary-list">{result.days.map((day) => <article className="day-card" key={day.day}><div className="day-number">DAY <b>{String(day.day).padStart(2, '0')}</b><small>{day.date}</small></div><div><h2>{day.title}</h2>{[['Morning', day.morning], ['Afternoon', day.afternoon], ['Evening', day.evening]].map(([slot, activities]) => activities.length > 0 && <div className="time-slot" key={slot}><b>{slot}</b><ul>{activities.map((activity) => <li key={activity}>{activity}</li>)}</ul></div>)}{day.notes.length > 0 && <p className="day-notes">{day.notes.join(' ')}</p>}</div></article>)}</div>
               <p className="result-note">{result.note}</p>
-              <form className="refine-card" onSubmit={submitRefinement}>
+              {!isSharedView && <form className="refine-card" onSubmit={submitRefinement}>
                 <label className="field-label" htmlFor="refine-request">Want to change something?</label>
                 <p className="field-help">Ask for a different pace, more food stops, or a change to one day.</p>
                 <textarea id="refine-request" maxLength={500} placeholder="e.g. Make day 2 more relaxed and add a museum" value={refinement} onChange={(event) => setRefinement(event.target.value)} />
                 <div className="refine-actions"><label className="small-label" htmlFor="refine-day">APPLY TO</label><select id="refine-day" className="plain-input" value={refineDay} onChange={(event) => setRefineDay(event.target.value)}><option value="">Whole itinerary</option>{result.days.map((day) => <option key={day.day} value={day.day}>Day {day.day}</option>)}</select><button className="primary-button" type="submit" disabled={refining || !refinement.trim()}>{refining ? 'Updating…' : 'Refine plan'} <Sparkles size={15} /></button></div>
                 {refineMessage && <p className="refine-message" role="status">{refineMessage}</p>}
-              </form>
-              <button className="back-button plan-again" type="button" onClick={() => { setResult(null); setRecommendations(null); setTripId(null); setRefineMessage(''); setStep(0); setTrip(blankTrip) }}><ArrowLeft size={16} /> Plan another trip</button>
+              </form>}
+              {!isSharedView && <button className="back-button plan-again" type="button" onClick={() => { setResult(null); setRecommendations(null); setTripId(null); setRefineMessage(''); setStep(0); setTrip(blankTrip) }}><ArrowLeft size={16} /> Plan another trip</button>}
             </motion.section>
           )}
         </section>

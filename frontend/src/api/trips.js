@@ -1,7 +1,23 @@
-async function send(path, data) {
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const OWNER_ID_KEY = 'wanderwise-owner-id'
+
+function getOwnerId() {
+  let ownerId = localStorage.getItem(OWNER_ID_KEY)
+  if (!ownerId) {
+    ownerId = crypto.randomUUID()
+    localStorage.setItem(OWNER_ID_KEY, ownerId)
+  }
+  return ownerId
+}
+
+function ownerHeaders() {
+  return { 'X-Owner-ID': getOwnerId() }
+}
+
+async function send(path, data, method = 'POST') {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...ownerHeaders() },
     body: JSON.stringify(data),
   })
   const result = await response.json()
@@ -17,12 +33,23 @@ async function send(path, data) {
 export const tripsAPI = {
   create: (trip) => send('/api/trips', trip),
   list: async () => {
-    const response = await fetch('/api/trips')
+    const response = await fetch(`${API_BASE_URL}/api/trips`, { headers: ownerHeaders() })
     if (!response.ok) throw new Error('Could not load trips.')
     return response.json()
   },
+  get: async (tripId) => {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}`, { headers: ownerHeaders() })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.detail || 'Could not load this trip.')
+    return result
+  },
+  update: (tripId, fields) => send(`/api/trips/${tripId}`, fields, 'PATCH'),
+  remove: async (tripId) => {
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}`, { method: 'DELETE', headers: ownerHeaders() })
+    if (!response.ok) throw new Error('Could not delete trip.')
+  },
   recommend: async (tripId) => {
-    const response = await fetch(`/api/trips/${tripId}/recommendations`, { method: 'POST' })
+    const response = await fetch(`${API_BASE_URL}/api/trips/${tripId}/recommendations`, { method: 'POST', headers: ownerHeaders() })
     const result = await response.json()
     if (!response.ok) throw new Error(result.detail || 'Could not load recommendations.')
     return result

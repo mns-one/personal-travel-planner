@@ -30,15 +30,6 @@ class TripCreate(BaseModel):
         return self
 
 
-class TripResponse(TripCreate):
-    """Validated trip returned after creating a trip."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    status: Literal["created"] = "created"
-
-
 class ItineraryRequest(BaseModel):
     trip_id: UUID
 
@@ -58,6 +49,31 @@ class ItineraryResponse(BaseModel):
     destination: str
     days: list[ItineraryDay]
     note: str
+
+
+class TripResponse(TripCreate):
+    """Validated trip returned after creating or editing a trip."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: Literal["created"] = "created"
+    itinerary: ItineraryResponse | None = None
+
+
+class TripUpdate(BaseModel):
+    """Fields that can be changed in a saved trip."""
+
+    destination: str | None = Field(default=None, min_length=2, max_length=100)
+    start_date: date | None = None
+    end_date: date | None = None
+    budget: float | None = Field(default=None, gt=0, le=10_000_000)
+    travelers: int | None = Field(default=None, ge=1, le=20)
+    interests: list[str] | None = Field(default=None, max_length=10)
+    dietary_needs: list[str] | None = Field(default=None, max_length=10)
+    mobility_needs: list[str] | None = Field(default=None, max_length=10)
+    travel_pace: Literal["relaxed", "balanced", "active"] | None = None
+    travel_style: Literal["budget", "comfort", "luxury"] | None = None
 
 
 class ItineraryRefineRequest(BaseModel):

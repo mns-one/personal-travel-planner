@@ -1,20 +1,106 @@
-# Wanderwise — Personalized Travel Itinerary Planner
+# Wanderwise
 
-A beginner friendly React and Python project that collects trip preferences and creates a simple starter itinerary.
+Wanderwise is a personal travel planner built with React and FastAPI. Enter your destination, dates, budget, group size, interests, travel pace, and travel needs to create a day-by-day itinerary.
 
-## Phase 1 features
+## What it does
 
-- Three step trip form for destination, dates, budget, travelers, interests, dietary needs, pace, and travel style.
-- Frontend checks for required fields and date order, with backend validation using Pydantic.
-- FastAPI endpoints to save a trip in memory and create a day-by-day draft.
-- A prompt builder that turns saved preferences, including dietary and mobility needs, into structured AI instructions.
-- Categorized attraction, dining, and experience suggestions, with optional Gemini generation and a local fallback.
-- Structured morning, afternoon, and evening schedules, generated through a provider-based Groq integration or a local fallback.
-- Framer Motion transitions and Lucide icons in a responsive interface.
-- Pydantic models for trip request/response and registration, login, and token response data.
+- Collects trip details in a step-by-step form.
+- Uses Groq for attraction, dining, and experience recommendations, day-by-day itinerary generation, and itinerary refinements.
+- Provides starter suggestions and a basic itinerary when Groq is not configured or returns an unusable response.
+- Lets you refine a plan, save trips, view trip history, edit or delete trips, and share or export an itinerary.
+- Stores trips in local SQLite by default, or Supabase when configured.
+- Separates trips by a random browser ID stored in `localStorage`.
 
-Groq is optional; without its key the app shows a starter schedule. Recommendation generation can use Gemini from Phase 3, while itinerary generation uses Groq in this phase. Authentication models are data contracts only; registration, login, password storage, and JWT issuance are not implemented. Trips are stored in memory and cleared when the backend restarts.
+## Tech stack
+
+- Frontend: React, Vite, Framer Motion, Lucide
+- Backend: Python, FastAPI, Pydantic
+- Storage: SQLite or Supabase
+- Optional AI: Groq for all AI features
 
 ## Run locally
 
-See [SETUP.md](SETUP.md). The API is documented in [API.md](API.md).
+You need Python 3.10+ and Node.js 18+.
+
+### 1. Start the backend
+
+In a terminal at the project root:
+
+```powershell
+cd backend
+python -m venv .venv
+```
+
+Activate the virtual environment:
+
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# macOS/Linux
+source .venv/bin/activate
+```
+
+Install dependencies and start FastAPI:
+
+```powershell
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+The API runs at `http://localhost:8000`. API docs are at `http://localhost:8000/docs`.
+
+### 2. Start the frontend
+
+In a second terminal at the project root:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite, usually `http://localhost:5173`.
+
+## Database
+
+The app uses SQLite automatically when Supabase is not configured. The local database file is `backend/database/trips.db` and is excluded from Git.
+
+To use Supabase:
+
+1. Create a Supabase project.
+2. Run [`backend/database/schema.sql`](backend/database/schema.sql) in the Supabase SQL Editor.
+3. Copy `backend/.env.example` to `backend/.env`.
+4. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`.
+5. Restart the backend.
+
+Keep `.env` and the service-role/secret key private. Never put the service key in frontend code or commit it. The current API has no login or per-user trip access, so keep a deployed demo private.
+
+Each browser creates a random owner ID and sends it with trip API requests. Clearing browser storage or switching browsers creates a different ID, so the old trips will not appear. This is only a college-demo separation method, not authentication.
+
+## Optional Groq AI
+
+Set keys in `backend/.env` and restart FastAPI:
+
+```env
+GROQ_API_KEY=your-groq-key
+```
+
+`GROQ_MODEL` can optionally choose a model; the default is `llama-3.3-70b-versatile`. Without the key, the app uses starter suggestions and a basic itinerary. Keep the key in the backend only; do not add it to the React app.
+
+## Project structure
+
+```text
+backend/
+  app/                 FastAPI routes, schemas, prompts, and services
+  database/schema.sql  Supabase table definition
+  tests/               Backend API tests
+frontend/
+  src/                 React app and API client
+```
+
+## More information
+
+- [Setup guide](SETUP.md)
+- [API routes](API.md)
+- [Deployment guide](DEPLOYMENT.md)

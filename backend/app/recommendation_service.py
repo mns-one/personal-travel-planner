@@ -1,10 +1,14 @@
 """Create personalized recommendations, with an optional AI service hook."""
 
 import json
-import os
+import logging
 
-from .prompt_builder import build_itinerary_prompt
+from pydantic import ValidationError
+
 from .schemas import Recommendation, RecommendationResponse, TripResponse
+from .services.ai import AIGenerationError, get_llm_provider
+
+logger = logging.getLogger(__name__)
 
 
 def _local_recommendations(trip: TripResponse) -> list[Recommendation]:
@@ -48,26 +52,33 @@ def _local_recommendations(trip: TripResponse) -> list[Recommendation]:
 
 
 async def get_recommendations(trip: TripResponse) -> RecommendationResponse:
-    """Use Gemini when configured; otherwise return categorized starter ideas."""
-    api_key = os.getenv("GEMINI_API_KEY")
-    if api_key:
+    """Use Groq when configured; otherwise return categorized starter ideas."""
+    provider = get_llm_provider()
+    if provider:
         try:
-            from google import genai
+            prompt = f"""Create exactly 5 personalized travel recommendations for this trip.
 
-            client = genai.Client(api_key=api_key)
-            prompt = build_itinerary_prompt(trip) + """
+Trip details:
+- Destination: {trip.destination}
+- Dates: {trip.start_date.isoformat()} to {trip.end_date.isoformat()}
+- Total budget: {trip.budget} (currency not specified)
+- Travelers: {trip.travelers}
+- Travel style: {trip.travel_style}
+- Interests: {', '.join(trip.interests) or 'local highlights'}
+- Dietary needs: {', '.join(trip.dietary_needs) or 'none stated'}
+- Mobility needs: {', '.join(trip.mobility_needs) or 'none stated'}
+- Pace: {trip.travel_pace}
 
-Also return exactly 5 recommendations as a JSON array. Each object must have:
+Return a JSON object with a top-level `recommendations` array. Each object must have:
 name, category (attraction/dining/experience), description, why_it_matches,
 estimated_cost (free/low/moderate/high), and interests (string array).
-Return only valid JSON with a top-level key named recommendations. Avoid claiming
-current opening hours, exact prices, availability, or accessibility unless supplied."""
-            response = await client.aio.models.generate_content(
-                model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-                contents=prompt,
-                config={"response_mime_type": "application/json"},
+Avoid claiming current opening hours, exact prices, availability, or accessibility
+unless those details are supplied. Return only valid JSON."""
+            raw_response = await provider.generate(
+                "You are a careful travel recommendation assistant. Follow the trip preferences and return only the requested JSON.",
+                prompt,
             )
-            parsed = json.loads(response.text or "{}")
+            parsed = json.loads(raw_response)
             recommendations = [Recommendation.model_validate(item) for item in parsed["recommendations"]]
             if not recommendations:
                 raise ValueError("The AI returned no recommendations")
@@ -78,14 +89,14 @@ current opening hours, exact prices, availability, or accessibility unless suppl
                 source="ai",
                 note="AI suggestions are a starting point. Confirm prices, opening times, dietary options, and accessibility with each venue.",
             )
-        except Exception:
+        except (AIGenerationError, KeyError, TypeError, ValueError, ValidationError):
             # A provider error should not make the project unusable for a demo.
-            pass
+            logger.exception("Using starter recommendations after Groq generation failed")
 
     return RecommendationResponse(
         trip_id=trip.id,
         destination=trip.destination,
         recommendations=_local_recommendations(trip),
         source="curated_fallback",
-        note="Starter suggestions based on your preferences. Set GEMINI_API_KEY to enable AI generated recommendations. Verify venue details before visiting.",
+        note="Starter suggestions based on your preferences. Set GROQ_API_KEY to enable AI-generated recommendations. Verify venue details before visiting.",
     )
