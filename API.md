@@ -55,7 +55,7 @@ Returns `{ "trip_id", "destination", "recommendations", "source", "note" }`. Rec
 
 ## Itinerary generation
 
-`POST /api/itineraries/generate` calls the itinerary service and saves the result to its trip. Set `GROQ_API_KEY` to enable Groq for itinerary generation, recommendations, and refinements; optional `GROQ_MODEL` selects a model (default `llama-3.3-70b-versatile`). Without a key, these features use local fallback content. Generated itineraries pass through the schedule optimizer.
+`POST /api/itineraries/generate` calls the itinerary service and saves the result to its trip. Set `GROQ_API_KEY` to enable Groq for itinerary generation, recommendations, and refinements; optional `GROQ_MODEL` selects a model (default `openai/gpt-oss-20b`). Without a key, these features use local fallback content. Generated itineraries pass through the schedule optimizer.
 
 ## `GET /api/trips/{trip_id}`
 

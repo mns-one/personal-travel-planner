@@ -27,7 +27,7 @@ class GroqProvider(LLMProvider):
             from groq import AsyncGroq
 
             self.client = AsyncGroq(api_key=api_key)
-            self.model = model or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            self.model = model or os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
             logger.info("Groq async client initialized")
         except Exception as error:
             logger.exception("Failed to initialize Groq provider")

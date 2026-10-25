@@ -86,7 +86,7 @@ Set keys in `backend/.env` and restart FastAPI:
 GROQ_API_KEY=your-groq-key
 ```
 
-`GROQ_MODEL` can optionally choose a model; the default is `llama-3.3-70b-versatile`. Without the key, the app uses starter suggestions and a basic itinerary. Keep the key in the backend only; do not add it to the React app.
+`GROQ_MODEL` can optionally choose a model; the default is `openai/gpt-oss-20b`. Without the key, the app uses starter suggestions and a basic itinerary. Keep the key in the backend only; do not add it to the React app.
 
 ## Project structure
 
